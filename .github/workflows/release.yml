@@ -53,7 +53,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_KEY_PASSPHRASE: ${{ secrets.TAURI_KEY_PASSPHRASE }}
+          TAURI_KEY_PASSPHRASE: ""
         with:
           projectPath: 'frontend' # <-- Le indica a Tauri que tu proyecto está en /frontend
           tagName: ${{ github.ref_name }}
