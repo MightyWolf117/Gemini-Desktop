@@ -1,7 +1,10 @@
 {
-  "name": "frontend",
+  "name": "orbit",
   "private": true,
   "version": "1.0.0-26.7",
+  "description": "Orbit Desktop Assistant",
+  "author": "MightyWolf",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "dev": "vite",
