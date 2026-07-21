@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Upload, User, Bot } from 'lucide-react';
+import { Save, Image as ImageIcon, Upload, User, Bot, FolderOpen, AlertTriangle, ExternalLink } from 'lucide-react';
 import useSettingsStore from '../../store/settingsStore';
 import Modal from '../../components/common/Modal/Modal';
 import styles from './SettingsPage.module.scss';
 import { invoke } from '@tauri-apps/api/tauri';
 import { convertFileSrc } from '@tauri-apps/api/tauri';
+import { open } from '@tauri-apps/api/dialog';
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_IPC__ !== undefined;
 
@@ -14,22 +15,51 @@ const SettingsPage = () => {
     bgBlur, bgOpacity, bgPath,
     userIconPath, userIconPosX, userIconPosY,
     aiIconPath, aiIconPosX, aiIconPosY,
-    setTheme, setAiModel, setTemperature, setBgSettings, setIconSettings,
-    saveBgSettingsToBackend, saveIconSettingsToBackend, resetSettings,
+    basePath, resolvedBasePath, enableWsl, googleApiKey,
+    setTheme, setAiModel, setTemperature, setBgSettings, setIconSettings, setBasePath, setEnableWsl, setGoogleApiKey,
+    saveBgSettingsToBackend, saveIconSettingsToBackend, savePathConfigToBackend, loadPathConfigFromBackend, saveWslConfigToBackend, loadWslConfigFromBackend, saveApiConfigToBackend, resetSettings,
     availableModels, fetchModels
   } = useSettingsStore();
 
   useEffect(() => {
     fetchModels();
-  }, [fetchModels]);
+    if (isTauri) {
+      loadPathConfigFromBackend();
+      loadWslConfigFromBackend();
+    }
+  }, [fetchModels, loadPathConfigFromBackend, loadWslConfigFromBackend]);
 
   const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', isError: false });
+  const [warningModalOpen, setWarningModalOpen] = useState(false);
+  const [wslStatus, setWslStatus] = useState(null);
+  const [appVersion, setAppVersion] = useState('');
+
+  useEffect(() => {
+    if (isTauri) {
+      import('@tauri-apps/api/app').then(app => app.getVersion().then(setAppVersion));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isTauri && enableWsl) {
+      invoke('check_wsl_installed').then(res => {
+        setWslStatus(res);
+      }).catch(() => {
+        setWslStatus({ installed: false, has_distro: false, default_distro: null });
+      });
+    } else {
+      setWslStatus(null);
+    }
+  }, [enableWsl]);
 
   const handleSave = async () => {
     try {
       if (isTauri) {
         await saveBgSettingsToBackend();
         await saveIconSettingsToBackend();
+        await savePathConfigToBackend();
+        await saveWslConfigToBackend();
+        await saveApiConfigToBackend();
       }
       setModalState({
         isOpen: true,
@@ -44,6 +74,30 @@ const SettingsPage = () => {
         message: `Hubo un error al guardar los ajustes: ${e}`,
         isError: true
       });
+    }
+  };
+
+  const handleSelectFolder = async () => {
+    if (!isTauri) return;
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+      });
+      if (selected) {
+        setBasePath(selected);
+      }
+    } catch (e) {
+      console.error("Error abriendo selector de carpeta:", e);
+    }
+  };
+
+  const handleOpenFolder = async () => {
+    if (!isTauri || !resolvedBasePath) return;
+    try {
+      await invoke('open_folder', { path: resolvedBasePath });
+    } catch (e) {
+      console.error("Error abriendo carpeta:", e);
     }
   };
 
@@ -126,6 +180,25 @@ const SettingsPage = () => {
 
       <div className={styles.content}>
         
+        {/* API Key */}
+        <section className={styles.section} style={{ borderColor: !googleApiKey ? '#ef4444' : '#333' }}>
+          <h2 className={styles.sectionTitle}>
+            API Key de Google (Gemini)
+          </h2>
+          <div className={styles.formGroup}>
+            <label className={styles.label}>Ingresa tu API Key para poder chatear con la IA:</label>
+            <input 
+              type="password" 
+              className={styles.input} 
+              value={googleApiKey || ''} 
+              onChange={(e) => setGoogleApiKey(e.target.value)}
+              placeholder="AIzaSy..."
+            />
+            {!googleApiKey && <div className={styles.helpText} style={{ color: '#ef4444' }}>⚠️ API Key requerida para chatear.</div>}
+            {googleApiKey && <div className={styles.helpText} style={{ color: '#10b981' }}>✓ API Key configurada.</div>}
+          </div>
+        </section>
+
         {/* Sección de Avatares */}
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>
@@ -260,9 +333,138 @@ const SettingsPage = () => {
           </div>
         </section>
 
+        {/* Sección de Opciones de Desarrollador */}
+        {isTauri && (
+          <section className={styles.section}>
+            <h2 className={styles.sectionTitle}>
+              <FolderOpen size={18} style={{marginRight: '8px', verticalAlign: 'middle'}}/>
+              Opciones de Desarrollador (Rutas de Datos)
+            </h2>
+            <div className={styles.formGroup}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
+                <label className={styles.label} style={{ marginBottom: 0, marginRight: '8px' }}>Ruta Base de Datos Locales</label>
+                <AlertTriangle 
+                  size={16} 
+                  color="#ffcc00" 
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setWarningModalOpen(true)}
+                  title="Precaución al cambiar la ruta"
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <p className={styles.helpText} style={{ flex: 1, margin: 0, padding: '10px 14px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '6px', border: '1px solid rgba(255, 255, 255, 0.1)', color: '#eee', fontSize: '0.95rem', wordBreak: 'break-all', lineHeight: '1.4' }}>
+                  <strong>Ruta en uso:</strong> <br/>
+                  {resolvedBasePath || 'Cargando ruta por defecto...'}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button 
+                    type="button" 
+                    style={{ padding: '8px 16px', borderRadius: '4px', border: 'none', background: '#3b82f6', color: '#fff', cursor: 'pointer', fontWeight: '500', whiteSpace: 'nowrap' }} 
+                    onClick={handleSelectFolder}
+                  >
+                    Cambiar Ruta
+                  </button>
+                  <button 
+                    type="button" 
+                    style={{ padding: '8px 16px', borderRadius: '4px', border: '1px solid #555', background: 'rgba(255, 255, 255, 0.05)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '500', whiteSpace: 'nowrap' }} 
+                    onClick={handleOpenFolder} 
+                    title="Abrir carpeta en el explorador"
+                  >
+                    <FolderOpen size={16} /> Ir a carpeta
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.formGroup} style={{ marginTop: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <label className={styles.label} style={{ marginBottom: '4px' }}>Ejecución de Código con WSL</label>
+                  <p className={styles.helpText} style={{ margin: 0 }}>Permite que el agente ejecute scripts de Python, Bash o JS (Node) en un entorno aislado de Windows Subsystem for Linux.</p>
+                  
+                  {enableWsl && wslStatus && (
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      {wslStatus.installed ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 8px', borderRadius: '4px', fontSize: '13px' }}>
+                          <span>🐧</span> WSL Instalado
+                        </div>
+                      ) : (
+                        <div 
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', cursor: 'help' }}
+                          title="Para instalar WSL:&#10;1. Abre PowerShell como Administrador.&#10;2. Ejecuta 'wsl --install'.&#10;3. Reinicia tu computadora.&#10;O instálalo desde la Microsoft Store."
+                        >
+                          <span>🐧</span> WSL No Instalado
+                        </div>
+                      )}
+
+                      {wslStatus.installed && wslStatus.has_distro ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#3b82f6', background: 'rgba(59, 130, 246, 0.1)', padding: '4px 8px', borderRadius: '4px', fontSize: '13px' }}>
+                          <span>📦</span> Distro: {wslStatus.default_distro || 'Desconocida'}
+                        </div>
+                      ) : wslStatus.installed && !wslStatus.has_distro ? (
+                        <div 
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', background: 'rgba(239, 68, 68, 0.1)', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', cursor: 'help' }}
+                          title="WSL está instalado, pero no hay distribuciones.&#10;Abre PowerShell y ejecuta:&#10;'wsl --install -d Ubuntu'&#10;O instala una desde la Microsoft Store."
+                        >
+                          <span>⚠️</span> Sin Distribuciones
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                  {enableWsl && wslStatus === null && (
+                    <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px', color: '#aaa', fontSize: '13px' }}>
+                      Comprobando WSL...
+                    </div>
+                  )}
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', alignSelf: 'flex-start', marginTop: '6px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={enableWsl} 
+                    onChange={(e) => setEnableWsl(e.target.checked)} 
+                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                  />
+                  <span style={{ marginLeft: '8px', color: '#eee', fontWeight: '500' }}>Habilitar WSL</span>
+                </label>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Sección de Atajos de Teclado */}
+        <section className={styles.section}>
+          <h2 className={styles.sectionTitle}>Atajos de Teclado (Hotkeys)</h2>
+          <div className={styles.formGroup} style={{ background: 'rgba(0,0,0,0.2)', padding: '15px', borderRadius: '8px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', color: '#eee', fontSize: '14px' }}>
+              <tbody>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ padding: '8px 0', fontWeight: '500' }}>Nuevo Chat</td>
+                  <td style={{ padding: '8px 0', textAlign: 'right' }}><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>Ctrl</kbd> + <kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>N</kbd></td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ padding: '8px 0', fontWeight: '500' }}>Volver al Chat (Home)</td>
+                  <td style={{ padding: '8px 0', textAlign: 'right' }}><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>Ctrl</kbd> + <kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>H</kbd></td>
+                </tr>
+                <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                  <td style={{ padding: '8px 0', fontWeight: '500' }}>Abrir Personalidades</td>
+                  <td style={{ padding: '8px 0', textAlign: 'right' }}><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>Ctrl</kbd> + <kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>P</kbd></td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '8px 0', fontWeight: '500' }}>Abrir Ajustes</td>
+                  <td style={{ padding: '8px 0', textAlign: 'right' }}><kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>Ctrl</kbd> + <kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', border: '1px solid #555' }}>,</kbd></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
       </div>
 
       <footer className={styles.footer}>
+        <div style={{ flex: 1, color: '#6E6E77', fontSize: '0.9rem', display: 'flex', alignItems: 'center' }}>
+          {appVersion ? `Orbit Versión ${appVersion}` : 'Orbit'}
+        </div>
         <button className={styles.resetBtn} onClick={resetSettings}>Restablecer Valores</button>
         <button className={styles.saveBtn} onClick={handleSave}>
           <Save size={18} />
@@ -285,6 +487,24 @@ const SettingsPage = () => {
         }
       >
         <p>{modalState.message}</p>
+      </Modal>
+
+      {/* Modal de Advertencia de Rutas */}
+      <Modal 
+        isOpen={warningModalOpen} 
+        onClose={() => setWarningModalOpen(false)}
+        title="Advertencia de Migración"
+        actions={
+          <button 
+            className={`${styles.modalBtn} ${styles.modalBtnPrimary}`}
+            onClick={() => setWarningModalOpen(false)}
+          >
+            Entendido
+          </button>
+        }
+      >
+        <p>Si cambias la ruta base, los archivos existentes en la ruta anterior (historial, avatares, fondos) <strong>NO se moverán automáticamente</strong>.</p>
+        <p style={{ marginTop: '10px' }}>El sistema empezará a guardar y buscar los datos en la nueva ruta. Deberás configurar nuevamente los ajustes o mover la información manualmente desde tu carpeta anterior.</p>
       </Modal>
     </div>
   );

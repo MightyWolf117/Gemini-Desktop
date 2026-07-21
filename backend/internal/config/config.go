@@ -33,7 +33,7 @@ func LoadConfig() *Config {
 	}
 
 	if cfg.GoogleAPIKey == "" {
-		log.Fatal("API_KEY_GOOGLE es obligatoria")
+		log.Println("API_KEY_GOOGLE no configurada en entorno, se requerirá enviarla por frontend.")
 	}
 
 	return cfg

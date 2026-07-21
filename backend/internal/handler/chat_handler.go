@@ -9,12 +9,14 @@ import (
 )
 
 type ChatHandler struct {
-	aiService domain.AIService
+	aiService      domain.AIService
+	fallbackApiKey string
 }
 
-func NewChatHandler(aiService domain.AIService) *ChatHandler {
+func NewChatHandler(aiService domain.AIService, fallbackApiKey string) *ChatHandler {
 	return &ChatHandler{
-		aiService: aiService,
+		aiService:      aiService,
+		fallbackApiKey: fallbackApiKey,
 	}
 }
 
@@ -34,7 +36,18 @@ func (h *ChatHandler) HandleChat(c *gin.Context) {
 		return
 	}
 
-	response, err := h.aiService.GenerateResponse(c.Request.Context(), req)
+	apiKey := c.GetHeader("X-Google-API-Key")
+	if apiKey == "" {
+		apiKey = h.fallbackApiKey
+	}
+	if apiKey == "" {
+		c.JSON(http.StatusUnauthorized, domain.ChatResponse{
+			Error: "API Key de Google no configurada. Por favor, añádela en Ajustes.",
+		})
+		return
+	}
+
+	response, err := h.aiService.GenerateResponse(c.Request.Context(), req, apiKey)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, domain.ChatResponse{
 			Error: "Error procesando la solicitud de IA: " + err.Error(),

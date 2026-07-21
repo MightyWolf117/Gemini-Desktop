@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar/Sidebar';
 import ChatPage from './pages/ChatPage/ChatPage';
 import SettingsPage from './pages/SettingsPage/SettingsPage';
@@ -7,12 +7,34 @@ import styles from './App.module.scss';
 import useSettingsStore from './store/settingsStore';
 import { useEffect, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/tauri';
+import HotkeyManager from './components/common/HotkeyManager/HotkeyManager';
 
 // Detectar entorno Tauri
 const isTauri = typeof window !== 'undefined' && window.__TAURI_IPC__ !== undefined;
 
+const ProtectedRoutes = () => {
+  const { googleApiKey } = useSettingsStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Si no hay API Key y no estamos en la página de ajustes
+    if (!googleApiKey && location.pathname !== '/settings') {
+      navigate('/settings');
+    }
+  }, [googleApiKey, location.pathname, navigate]);
+
+  return (
+    <Routes>
+      <Route path="/" element={<ChatPage />} />
+      <Route path="/personalities" element={<PersonalityPage />} />
+      <Route path="/settings" element={<SettingsPage />} />
+    </Routes>
+  );
+};
+
 function App() {
-  const { theme, bgPath, bgBlur, bgOpacity, loadBgSettingsFromBackend, loadIconSettingsFromBackend } = useSettingsStore();
+  const { theme, bgPath, bgBlur, bgOpacity, loadBgSettingsFromBackend, loadIconSettingsFromBackend, loadApiConfigFromBackend, googleApiKey } = useSettingsStore();
 
   useEffect(() => {
     document.body.className = `theme-${theme}`;
@@ -23,8 +45,9 @@ function App() {
     if (isTauri) {
       loadBgSettingsFromBackend();
       loadIconSettingsFromBackend();
+      loadApiConfigFromBackend();
     }
-  }, [loadBgSettingsFromBackend, loadIconSettingsFromBackend]);
+  }, [loadBgSettingsFromBackend, loadIconSettingsFromBackend, loadApiConfigFromBackend]);
 
   const [showSplash, setShowSplash] = useState(true);
   const [isFadingOut, setIsFadingOut] = useState(false);
@@ -54,6 +77,7 @@ function App() {
 
   return (
     <Router>
+      <HotkeyManager />
       {/* Capa base de fondo */}
       <div 
         className={styles.globalBackground}
@@ -76,11 +100,7 @@ function App() {
       <div className={styles.appLayout}>
         <Sidebar />
         <main className={styles.mainContent}>
-          <Routes>
-            <Route path="/" element={<ChatPage />} />
-            <Route path="/personalities" element={<PersonalityPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+          <ProtectedRoutes />
         </main>
       </div>
     </Router>

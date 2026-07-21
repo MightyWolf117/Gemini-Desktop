@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/google/generative-ai-go/genai"
 	"google.golang.org/api/option"
@@ -11,50 +12,21 @@ import (
 	"orbit-backend/internal/domain"
 )
 
-type aiService struct {
-	apiKey   string
-	persRepo domain.PersonalityRepository
-	histRepo domain.HistorialRepository
+type aiService struct {}
+
+func NewAIService() domain.AIService {
+	return &aiService{}
 }
 
-func NewAIService(apiKey string, persRepo domain.PersonalityRepository, histRepo domain.HistorialRepository) domain.AIService {
-	return &aiService{
-		apiKey:   apiKey,
-		persRepo: persRepo,
-		histRepo: histRepo,
-	}
-}
-
-func (s *aiService) GenerateResponse(ctx context.Context, req domain.ChatRequest) (*domain.ChatResponse, error) {
-	var personality *domain.Personality
-	var err error
-
-	if req.PersonalityID != nil {
-		personality, err = s.persRepo.GetPersonalityByID(*req.PersonalityID)
-		if err != nil {
-			log.Printf("Error obteniendo personalidad por ID %d: %v", *req.PersonalityID, err)
-		}
-	}
-
-	// Fallback si no hay ID, o si falló la búsqueda por ID
-	if personality == nil {
-		personality, err = s.persRepo.GetPersonality()
-		if err != nil {
-			log.Printf("Error obteniendo personalidad por defecto: %v", err)
-			personality = &domain.Personality{
-				Prompt: "Eres un asistente virtual útil e inteligente.",
-			}
-		}
-	}
-
+func (s *aiService) GenerateResponse(ctx context.Context, req domain.ChatRequest, apiKey string) (*domain.ChatResponse, error) {
 	// Inicializar el cliente de Google Gemini
-	client, err := genai.NewClient(ctx, option.WithAPIKey(s.apiKey))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		return nil, fmt.Errorf("error inicializando cliente gemini: %w", err)
 	}
 	defer client.Close()
 
-	modelName := "gemini-flash-latest"
+	modelName := "gemini-1.5-flash"
 	if req.Model != "" {
 		modelName = req.Model
 	}
@@ -64,9 +36,13 @@ func (s *aiService) GenerateResponse(ctx context.Context, req domain.ChatRequest
 		model.Temperature = req.Temperature
 	}
 
-	// Configuramos las instrucciones del sistema (la personalidad)
+	// Configuramos las instrucciones del sistema (la personalidad enviada por el frontend)
+	prompt := req.PersonalityPrompt
+	if prompt == "" {
+		prompt = "Eres un asistente virtual útil e inteligente."
+	}
 	model.SystemInstruction = &genai.Content{
-		Parts: []genai.Part{genai.Text(personality.Prompt)},
+		Parts: []genai.Part{genai.Text(prompt)},
 	}
 
 	// Iniciar una sesión de chat
@@ -111,37 +87,63 @@ func (s *aiService) GenerateResponse(ctx context.Context, req domain.ChatRequest
 
 	// Generar título si fue solicitado y tenemos mensajes
 	var title string
-	var historial *domain.Historial
 	if req.GenerateTitle && len(req.Messages) > 0 {
 		firstMsg := req.Messages[0].Content
-		titlePrompt := fmt.Sprintf("Genera un título corto (máximo 4 palabras) para una conversación que comienza con este mensaje: \"%s\". Responde ÚNICAMENTE con el título, sin comillas ni texto adicional.", firstMsg)
+		titlePrompt := fmt.Sprintf("Actúa como un sintetizador de textos. Tienes estrictamente prohibido conversar, saludar o dar explicaciones. Resume el siguiente mensaje en un título de MÁXIMO 4 palabras. Tu única respuesta debe ser el título envuelto en etiquetas <title> y </title>.\n\nMensaje: \"%s\"", firstMsg)
 
-		titleModel := client.GenerativeModel("gemini-flash-latest")
+		titleModel := client.GenerativeModel("gemma-4-31b-it")
 		titleResp, err := titleModel.GenerateContent(ctx, genai.Text(titlePrompt))
-		if err == nil && len(titleResp.Candidates) > 0 && len(titleResp.Candidates[0].Content.Parts) > 0 {
+		if err == nil && titleResp != nil && len(titleResp.Candidates) > 0 && titleResp.Candidates[0].Content != nil && len(titleResp.Candidates[0].Content.Parts) > 0 {
 			if t, ok := titleResp.Candidates[0].Content.Parts[0].(genai.Text); ok {
-				title = string(t)
-				// Guardar en Supabase si tenemos código de chat
-				if req.ChatCode != nil {
-					newHistorial := &domain.Historial{
-						Nombre: title,
-						Code:   *req.ChatCode,
-					}
-					if err := s.histRepo.CreateHistorial(newHistorial); err != nil {
-						log.Printf("Error creando historial en base de datos: %v", err)
-					} else {
-						historial = newHistorial
+				rawTitle := string(t)
+				
+				// Extraer contenido entre <title> y </title> si el modelo incluyó texto adicional
+				startIndex := strings.Index(rawTitle, "<title>")
+				endIndex := strings.LastIndex(rawTitle, "</title>")
+				if startIndex != -1 && endIndex != -1 && endIndex > startIndex {
+					rawTitle = rawTitle[startIndex+7 : endIndex]
+				} else {
+					// Fallback si el modelo no usó etiquetas pero respondió corto
+					lines := strings.Split(rawTitle, "\n")
+					for _, line := range lines {
+						line = strings.TrimSpace(line)
+						if len(line) > 0 && len(line) < 50 {
+							rawTitle = line
+							break
+						}
 					}
 				}
+
+				rawTitle = strings.TrimSpace(rawTitle)
+				rawTitle = strings.Trim(rawTitle, "\"")
+				rawTitle = strings.Trim(rawTitle, "'")
+				rawTitle = strings.Trim(rawTitle, "`")
+				rawTitle = strings.Trim(rawTitle, "*")
+				rawTitle = strings.Trim(rawTitle, "\n")
+				
+				// Si el resultado es demasiado largo, asumimos que el modelo falló al dar un título corto
+				if len(rawTitle) > 100 {
+					rawTitle = ""
+				}
+
+				title = rawTitle
 			}
 		} else {
 			log.Printf("Error o respuesta vacía generando título: %v", err)
 		}
+
+		// Fallback por si falló la IA
+		if title == "" {
+			fallbackTitle := firstMsg
+			if len(fallbackTitle) > 25 {
+				fallbackTitle = fallbackTitle[:22] + "..."
+			}
+			title = fallbackTitle
+		}
 	}
 
 	return &domain.ChatResponse{
-		Response:  responseText,
-		Title:     title,
-		Historial: historial,
+		Response: responseText,
+		Title:    title,
 	}, nil
 }

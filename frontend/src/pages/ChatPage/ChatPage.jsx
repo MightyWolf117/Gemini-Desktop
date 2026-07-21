@@ -1,20 +1,103 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User, ChevronDown } from 'lucide-react';
+import { Send, Bot, User, ChevronDown, Download } from 'lucide-react';
 import useChatStore from '../../store/chatStore';
 import useSettingsStore from '../../store/settingsStore';
 import { ENDPOINTS } from '../../service/api';
+import Modal from '../../components/common/Modal/Modal';
 import styles from './ChatPage.module.scss';
 import { convertFileSrc, invoke } from '@tauri-apps/api/tauri';
+
+const CodeBlock = ({ language, code, onDownload }) => {
+  const [output, setOutput] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const { enableWsl } = useSettingsStore();
+
+  const handleExecute = async () => {
+    if (!isTauri) return;
+    setIsExecuting(true);
+    setErrorMsg('');
+    setOutput('Ejecutando en WSL...');
+    
+    try {
+      const res = await invoke('execute_wsl_code', { code, lang: language });
+      setOutput(res);
+    } catch (e) {
+      setErrorMsg(e);
+      setOutput('');
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleOpenCmd = async () => {
+    if (!isTauri) return;
+    try {
+      await invoke('open_wsl_cmd', { code, lang: language });
+    } catch (e) {
+      alert("Error al abrir CMD: " + e);
+    }
+  };
+
+  const isExecutable = ['python', 'py', 'javascript', 'js', 'node', 'bash', 'sh', 'shell'].includes(language.toLowerCase());
+
+  // Limite de 50 lineas
+  const lines = output.split('\n');
+  const isTruncated = lines.length > 50;
+  const displayOutput = isTruncated ? lines.slice(0, 50).join('\n') : output;
+
+  return (
+    <div className={styles.codeBlockContainer}>
+      <div className={styles.codeBlockHeader}>
+        <span>{language}</span>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {isTauri && enableWsl && isExecutable && (
+            <>
+              <button className={styles.codeBlockDownloadBtn} onClick={handleExecute} disabled={isExecuting}>
+                {isExecuting ? '⏳ Ejecutando...' : '▶ Ejecutar'}
+              </button>
+              <button className={styles.codeBlockDownloadBtn} onClick={handleOpenCmd}>
+                💻 CMD
+              </button>
+            </>
+          )}
+          <button className={styles.codeBlockDownloadBtn} onClick={() => onDownload(code, language)}>
+            <Download size={14} /> Descargar
+          </button>
+        </div>
+      </div>
+      <pre className={styles.codeBlockPre}>
+        <code>{code}</code>
+      </pre>
+      
+      {(output || errorMsg) && (
+        <div style={{ background: '#0d0d0d', borderTop: '1px solid #333', padding: '12px', fontSize: '13px', color: '#10b981', fontFamily: 'Consolas, monospace', maxHeight: '400px', overflowY: 'auto', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
+          {errorMsg ? <div style={{ color: '#ef4444', marginBottom: '8px' }}>❌ {errorMsg}</div> : null}
+          {displayOutput && <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{displayOutput}</pre>}
+          {isTruncated && (
+            <div style={{ color: '#9ca3af', marginTop: '12px', borderTop: '1px dashed #4b5563', paddingTop: '8px', fontSize: '12px' }}>
+              ⚠️ Salida muy larga truncada a 50 líneas. Para ver la ejecución completa, utiliza el botón "CMD" o descarga el script.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_IPC__ !== undefined;
 
 const ChatPage = () => {
   const { chats, activeChatId, addMessage, setMessages, updateChatPersonality, updateChatTitle } = useChatStore();
-  const { userIconPath, userIconPosX, userIconPosY, aiIconPath, aiIconPosX, aiIconPosY, aiModel, temperature } = useSettingsStore();
+  const { userIconPath, userIconPosX, userIconPosY, aiIconPath, aiIconPosX, aiIconPosY, aiModel, temperature, googleApiKey } = useSettingsStore();
   const [inputValue, setInputValue] = useState('');
   const [personalities, setPersonalities] = useState([]);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef(null);
+
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [exportedPath, setExportedPath] = useState('');
 
   const activeChat = chats.find(c => c.id === activeChatId);
   const messages = activeChat?.messages || [];
@@ -51,25 +134,20 @@ const ChatPage = () => {
   useEffect(() => {
     const fetchPersonalities = async () => {
       try {
-        const response = await fetch(ENDPOINTS.PERSONALITIES);
-        if (response.ok) {
-          const data = await response.json();
-          if (isTauri) {
-            const processedData = await Promise.all(data.map(async (p) => {
-              if (p.image) {
-                try {
-                  const fullPath = await invoke('get_personality_image_path', { filename: p.image });
-                  return { ...p, localImageUrl: convertFileSrc(fullPath) };
-                } catch (e) {
-                  return p;
-                }
+        if (isTauri) {
+          const data = await invoke('get_personalities');
+          const processedData = await Promise.all(data.map(async (p) => {
+            if (p.image) {
+              try {
+                const fullPath = await invoke('get_personality_image_path', { filename: p.image });
+                return { ...p, localImageUrl: convertFileSrc(fullPath) };
+              } catch (e) {
+                return p;
               }
-              return p;
-            }));
-            setPersonalities(processedData || []);
-          } else {
-            setPersonalities(data || []);
-          }
+            }
+            return p;
+          }));
+          setPersonalities(processedData || []);
         }
       } catch (e) {
         console.error("Error fetching personalities:", e);
@@ -77,6 +155,83 @@ const ChatPage = () => {
     };
     fetchPersonalities();
   }, []);
+
+  const handleDownloadCode = async (code, language) => {
+    if (!isTauri) return;
+    
+    const extensionMap = {
+      python: 'py',
+      javascript: 'js',
+      typescript: 'ts',
+      rust: 'rs',
+      ruby: 'rb',
+      csharp: 'cs',
+      cpp: 'cpp',
+      c: 'c',
+      go: 'go',
+      java: 'java',
+      html: 'html',
+      css: 'css',
+      json: 'json',
+      markdown: 'md',
+      shell: 'sh',
+      bash: 'sh',
+      yaml: 'yml',
+      sql: 'sql'
+    };
+    
+    const langKey = language?.toLowerCase().trim() || 'txt';
+    const ext = extensionMap[langKey] || langKey;
+    const filename = `codigo_${Date.now()}.${ext}`;
+    
+    try {
+      const parentDir = await invoke('export_text_file', { filename, content: code });
+      setExportedPath(parentDir);
+      setSuccessModalOpen(true);
+    } catch (e) {
+      console.error("Error exporting code:", e);
+    }
+  };
+
+  const handleExportChat = async (format) => {
+    setExportModalOpen(false);
+    if (!isTauri || !activeChat) return;
+
+    let content = '';
+    const filename = `conversacion_${activeChatId}_${Date.now()}.${format}`;
+
+    if (format === 'json') {
+      content = JSON.stringify(messages, null, 2);
+    } else {
+      content = `# ${activeChat.title || 'Conversación'}\n\n`;
+      messages.forEach(m => {
+        content += `**${m.sender === 'user' ? 'Tú' : agentName}**:\n${m.text}\n\n---\n\n`;
+      });
+    }
+
+    try {
+      const parentDir = await invoke('export_text_file', { filename, content });
+      setExportedPath(parentDir);
+      setSuccessModalOpen(true);
+    } catch (e) {
+      console.error("Error exporting chat:", e);
+    }
+  };
+
+  const parseMessageText = (text) => {
+    if (!text) return null;
+    const blocks = text.split(/(```[\w-]*\n[\s\S]*?```)/g);
+    return blocks.map((block, index) => {
+      if (block.startsWith('```')) {
+        const lines = block.split('\n');
+        const firstLine = lines[0].replace('```', '').trim();
+        const lang = firstLine || 'txt';
+        const code = lines.slice(1, -1).join('\n');
+        return <CodeBlock key={index} language={lang} code={code} onDownload={handleDownloadCode} />;
+      }
+      return <span key={index}>{block}</span>;
+    });
+  };
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -107,9 +262,13 @@ const ChatPage = () => {
       content: msg.text
     }));
 
+    const selectedPersonalityIdStr = selectedPersonalityId ? selectedPersonalityId.toString() : '';
+    const selectedPersonality = personalities.find(p => p.id.toString() === selectedPersonalityIdStr);
+    const personalityPrompt = selectedPersonality ? selectedPersonality.instrucciones : '';
+
     const payload = {
       messages: apiMessages,
-      personality_id: selectedPersonalityId ? parseInt(selectedPersonalityId) : null,
+      personality_prompt: personalityPrompt,
       generate_title: !activeChat.titleGenerated,
       chat_code: parseInt(activeChatId),
       model: aiModel,
@@ -119,7 +278,10 @@ const ChatPage = () => {
     try {
       const response = await fetch(ENDPOINTS.CHAT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-Google-API-Key': googleApiKey || ''
+        },
         body: JSON.stringify(payload)
       });
 
@@ -140,8 +302,23 @@ const ChatPage = () => {
           }
         }
         
-        if (data.title) {
-          updateChatTitle(activeChatId, data.title, data.historial?.id);
+        if (data.title && isTauri && !activeChat.titleGenerated) {
+          try {
+            const savedHist = await invoke('save_historial', {
+              historial: {
+                id: activeChat.dbId || 0,
+                created_at: "", 
+                nombre: data.title,
+                code: parseInt(activeChatId)
+              }
+            });
+            updateChatTitle(activeChatId, data.title, savedHist.id);
+          } catch (e) {
+            console.error("Error saving historial locally", e);
+            updateChatTitle(activeChatId, data.title, null);
+          }
+        } else if (data.title && !activeChat.titleGenerated) {
+            updateChatTitle(activeChatId, data.title, null);
         }
       } else {
         const errData = await response.json();
@@ -224,7 +401,7 @@ const ChatPage = () => {
                 <div className={styles.senderName}>
                   {msg.sender === 'user' ? 'Tú' : agentName}
                 </div>
-                <div className={styles.text}>{msg.text}</div>
+                <div className={styles.text}>{parseMessageText(msg.text)}</div>
               </div>
             </div>
           ))
@@ -265,19 +442,23 @@ const ChatPage = () => {
             </select>
             <ChevronDown size={14} className={styles.chevron} />
           </div>
+          <button className={styles.exportBtn} onClick={() => setExportModalOpen(true)} title="Exportar Conversación">
+            <Download size={14} /> Descargar Chat
+          </button>
         </div>
         <form className={styles.inputForm} onSubmit={handleSend}>
           <input
             type="text"
             className={styles.input}
-            placeholder="Escribe un mensaje al agente..."
+            placeholder={!googleApiKey ? "Configura tu API Key de Google en Ajustes..." : "Escribe tu mensaje..."}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
+            disabled={!googleApiKey}
           />
           <button 
             type="submit" 
             className={styles.sendButton}
-            disabled={!inputValue.trim() || isSending}
+            disabled={!inputValue.trim() || !activeChatId || isSending || !googleApiKey}
           >
             <Send size={20} />
           </button>
@@ -286,6 +467,51 @@ const ChatPage = () => {
           El agente de IA puede cometer errores. Considera verificar la información importante.
         </div>
       </div>
+
+      <Modal 
+        isOpen={exportModalOpen} 
+        onClose={() => setExportModalOpen(false)}
+        title="Exportar Conversación"
+      >
+        <p style={{ marginBottom: '15px' }}>¿En qué formato deseas descargar la conversación actual?</p>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+          <button 
+            style={{ padding: '8px 16px', borderRadius: '4px', border: '1px solid #444', background: 'transparent', color: '#fff', cursor: 'pointer' }}
+            onClick={() => handleExportChat('md')}
+          >
+            Markdown (.md)
+          </button>
+          <button 
+            style={{ padding: '8px 16px', borderRadius: '4px', border: 'none', background: '#3b82f6', color: '#fff', cursor: 'pointer' }}
+            onClick={() => handleExportChat('json')}
+          >
+            JSON (.json)
+          </button>
+        </div>
+      </Modal>
+
+      <Modal 
+        isOpen={successModalOpen} 
+        onClose={() => setSuccessModalOpen(false)}
+        title="Archivo Exportado"
+        actions={
+          <button 
+            style={{ padding: '8px 16px', borderRadius: '4px', border: 'none', background: '#3b82f6', color: '#fff', cursor: 'pointer' }}
+            onClick={async () => {
+              setSuccessModalOpen(false);
+              try {
+                await invoke('open_folder', { path: exportedPath });
+              } catch (e) {
+                console.error("Error abriendo carpeta:", e);
+              }
+            }}
+          >
+            Ir a carpeta
+          </button>
+        }
+      >
+        <p>El archivo se ha guardado correctamente en tu carpeta de descargas de la aplicación.</p>
+      </Modal>
     </div>
   );
 };

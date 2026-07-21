@@ -11,12 +11,12 @@ import (
 )
 
 type SystemHandler struct {
-	apiKey string
+	fallbackApiKey string
 }
 
-func NewSystemHandler(apiKey string) *SystemHandler {
+func NewSystemHandler(fallbackApiKey string) *SystemHandler {
 	return &SystemHandler{
-		apiKey: apiKey,
+		fallbackApiKey: fallbackApiKey,
 	}
 }
 
@@ -27,8 +27,17 @@ func (h *SystemHandler) Health(c *gin.Context) {
 
 // Models consulta la API de Google y devuelve los modelos soportados
 func (h *SystemHandler) Models(c *gin.Context) {
+	apiKey := c.GetHeader("X-Google-API-Key")
+	if apiKey == "" {
+		apiKey = h.fallbackApiKey
+	}
+	if apiKey == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "API Key de Google no configurada"})
+		return
+	}
+
 	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(h.apiKey))
+	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "No se pudo conectar a la API de Gemini"})
 		return
@@ -47,14 +56,23 @@ func (h *SystemHandler) Models(c *gin.Context) {
 			break
 		}
 		
-		// Filtramos para asegurar que sean modelos de generación de texto usables para chat
+		supported := false
+		for _, method := range m.SupportedGenerationMethods {
+			if method == "generateContent" {
+				supported = true
+				break
+			}
+		}
+
 		name := m.Name
-		if !strings.HasPrefix(name, "models/gemini") || strings.Contains(name, "vision") || strings.Contains(name, "embedding") {
+		if !supported || !strings.HasPrefix(name, "models/gemini") || strings.Contains(name, "vision") || strings.Contains(name, "embedding") || strings.Contains(name, "live-preview") {
 			continue
 		}
 
+		id := strings.TrimPrefix(name, "models/")
+
 		availableModels = append(availableModels, map[string]string{
-			"id":           name,
+			"id":           id,
 			"displayName":  m.DisplayName,
 			"description":  m.Description,
 			"status":       "Activo", 

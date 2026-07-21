@@ -2,7 +2,7 @@ import { X } from 'lucide-react';
 import styles from './Modal.module.scss';
 import { useEffect } from 'react';
 
-const Modal = ({ isOpen, onClose, title, children, actions }) => {
+const Modal = ({ isOpen, onClose, title, children, actions, disableOverlayClick = false }) => {
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key === 'Escape') onClose();
@@ -13,8 +13,14 @@ const Modal = ({ isOpen, onClose, title, children, actions }) => {
 
   if (!isOpen) return null;
 
+  const handleOverlayClick = () => {
+    if (!disableOverlayClick) {
+      onClose();
+    }
+  };
+
   return (
-    <div className={styles.overlay} onClick={onClose}>
+    <div className={styles.overlay} onClick={handleOverlayClick}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.header}>
           <h3 className={styles.title}>{title}</h3>

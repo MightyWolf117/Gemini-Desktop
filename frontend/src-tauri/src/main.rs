@@ -9,10 +9,20 @@ use std::path::PathBuf;
 use tauri::AppHandle;
 
 #[derive(Serialize, Deserialize, Clone, Default)]
+struct PathConfig {
+    base_path: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
 struct BgConfig {
     path: Option<String>,
     blur: u8,
     opacity: u8,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct WslConfig {
+    enabled: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -40,12 +50,134 @@ struct IconConfig {
     ai_icon_path: Option<String>,
     ai_icon_pos_x: i32,
     ai_icon_pos_y: i32,
+    icon_color: Option<String>,
+    google_api_key: Option<String>,
 }
 
-// Función auxiliar para obtener el directorio raíz de datos de la app
-fn get_app_data_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
+#[derive(Serialize, Deserialize, Clone, Default)]
+struct ApiConfig {
+    google_api_key: Option<String>,
+}
+
+fn get_default_app_data_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
     tauri::api::path::app_local_data_dir(&app_handle.config())
         .ok_or_else(|| "No se pudo obtener el directorio de datos de la app".into())
+}
+
+fn get_app_data_dir(app_handle: &AppHandle) -> Result<PathBuf, String> {
+    let mut config_path = get_default_app_data_dir(app_handle)?;
+    config_path.push("config");
+    config_path.push("path_settings.json");
+
+    if config_path.exists() {
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(config) = serde_json::from_str::<PathConfig>(&content) {
+                if let Some(path_str) = config.base_path {
+                    if !path_str.trim().is_empty() {
+                        return Ok(PathBuf::from(path_str));
+                    }
+                }
+            }
+        }
+    }
+    
+    get_default_app_data_dir(app_handle)
+}
+
+#[tauri::command]
+fn save_path_config(app_handle: AppHandle, config: PathConfig) -> Result<(), String> {
+    let mut config_path = get_default_app_data_dir(&app_handle)?;
+    config_path.push("config");
+    fs::create_dir_all(&config_path).map_err(|e| e.to_string())?;
+
+    config_path.push("path_settings.json");
+    let config_json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(config_path, config_json).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn load_path_config(app_handle: AppHandle) -> Result<PathConfig, String> {
+    let mut config_path = get_default_app_data_dir(&app_handle)?;
+    config_path.push("config");
+    config_path.push("path_settings.json");
+
+    if config_path.exists() {
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(config) = serde_json::from_str::<PathConfig>(&content) {
+                return Ok(config);
+            }
+        }
+    }
+    
+    Ok(PathConfig { base_path: None })
+}
+
+#[tauri::command]
+fn get_current_base_path(app_handle: AppHandle) -> Result<String, String> {
+    let dir = get_app_data_dir(&app_handle)?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn save_wsl_config(app_handle: AppHandle, config: WslConfig) -> Result<(), String> {
+    let mut config_path = get_app_data_dir(&app_handle)?;
+    config_path.push("config");
+    fs::create_dir_all(&config_path).map_err(|e| e.to_string())?;
+
+    config_path.push("wsl_settings.json");
+    let config_json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(config_path, config_json).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn load_wsl_config(app_handle: AppHandle) -> Result<WslConfig, String> {
+    let mut config_path = get_app_data_dir(&app_handle)?;
+    config_path.push("config");
+    config_path.push("wsl_settings.json");
+
+    if config_path.exists() {
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(config) = serde_json::from_str::<WslConfig>(&content) {
+                return Ok(config);
+            }
+        }
+    }
+    
+    Ok(WslConfig { enabled: false })
+}
+
+#[tauri::command]
+fn save_api_config(app_handle: AppHandle, config: ApiConfig) -> Result<(), String> {
+    let mut config_path = get_app_data_dir(&app_handle)?;
+    config_path.push("config");
+    fs::create_dir_all(&config_path).map_err(|e| e.to_string())?;
+
+    config_path.push("api_settings.json");
+    let config_json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    fs::write(config_path, config_json).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn load_api_config(app_handle: AppHandle) -> Result<ApiConfig, String> {
+    let mut config_path = get_app_data_dir(&app_handle)?;
+    config_path.push("config");
+    config_path.push("api_settings.json");
+
+    if config_path.exists() {
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(config) = serde_json::from_str::<ApiConfig>(&content) {
+                return Ok(config);
+            }
+        }
+    }
+    
+    Ok(ApiConfig { google_api_key: None })
 }
 
 #[tauri::command]
@@ -134,6 +266,8 @@ fn load_icon_config(app_handle: AppHandle) -> Result<IconConfig, String> {
             ai_icon_path: None,
             ai_icon_pos_x: 50,
             ai_icon_pos_y: 50,
+            icon_color: None,
+            google_api_key: None,
         })
     }
 }
@@ -281,6 +415,343 @@ fn delete_local_chat(
     Ok(())
 }
 
+#[tauri::command]
+fn export_text_file(
+    app_handle: AppHandle,
+    filename: String,
+    content: String,
+) -> Result<String, String> {
+    let mut dir = get_app_data_dir(&app_handle)?;
+    dir.push("assets");
+    dir.push("files");
+    
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    
+    dir.push(&filename);
+    fs::write(&dir, content).map_err(|e| e.to_string())?;
+    
+    let mut parent = dir.clone();
+    parent.pop();
+    Ok(parent.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    std::process::Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
+    
+    #[cfg(target_os = "macos")]
+    std::process::Command::new("open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    
+    #[cfg(target_os = "linux")]
+    std::process::Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+fn execute_wsl_code(app_handle: AppHandle, code: String, lang: String) -> Result<String, String> {
+    let (ext, cmd) = match lang.to_lowercase().as_str() {
+        "python" | "py" => ("py", "python3"),
+        "javascript" | "js" | "node" => ("js", "node"),
+        "bash" | "sh" | "shell" => ("sh", "bash"),
+        _ => return Err("Idioma no soportado para ejecución automática en WSL".into()),
+    };
+
+    let mut temp_dir = get_app_data_dir(&app_handle)?;
+    temp_dir.push("assets");
+    temp_dir.push("files");
+    fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+
+    let filename = format!("temp_exec_{}.{}", chrono::Utc::now().timestamp_millis(), ext);
+    let mut temp_file = temp_dir.clone();
+    temp_file.push(&filename);
+
+    fs::write(&temp_file, code).map_err(|e| e.to_string())?;
+
+    let output = std::process::Command::new("wsl")
+        .arg(cmd)
+        .arg(&filename)
+        .current_dir(&temp_dir)
+        .output()
+        .map_err(|e| format!("Error al ejecutar WSL: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    let mut full_output = String::new();
+    if !stdout.is_empty() {
+        full_output.push_str(&stdout);
+    }
+    if !stderr.is_empty() {
+        if !full_output.is_empty() {
+            full_output.push_str("\n--- Errores ---\n");
+        }
+        full_output.push_str(&stderr);
+    }
+    
+    if full_output.is_empty() {
+        full_output = "Ejecución finalizada sin salida.".to_string();
+    }
+
+    Ok(full_output)
+}
+#[derive(Serialize)]
+struct WslStatus {
+    installed: bool,
+    has_distro: bool,
+    default_distro: Option<String>,
+}
+
+#[tauri::command]
+fn check_wsl_installed() -> WslStatus {
+    #[cfg(target_os = "windows")]
+    {
+        match std::process::Command::new("wsl").arg("-l").arg("-q").output() {
+            Ok(output) => {
+                if output.status.success() {
+                    let clean_str: String = output.stdout.into_iter()
+                        .filter(|&b| b != 0 && b != 0xFF && b != 0xFE && b != b'\r')
+                        .map(|b| b as char)
+                        .collect();
+                    let default_distro = clean_str.lines().next().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+                    WslStatus {
+                        installed: true,
+                        has_distro: true,
+                        default_distro,
+                    }
+                } else {
+                    WslStatus {
+                        installed: true,
+                        has_distro: false,
+                        default_distro: None,
+                    }
+                }
+            }
+            Err(_) => WslStatus {
+                installed: false,
+                has_distro: false,
+                default_distro: None,
+            },
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        WslStatus {
+            installed: false,
+            has_distro: false,
+            default_distro: None,
+        }
+    }
+}
+#[tauri::command]
+fn open_wsl_cmd(app_handle: AppHandle, code: String, lang: String) -> Result<(), String> {
+    let (ext, cmd) = match lang.to_lowercase().as_str() {
+        "python" | "py" => ("py", "python3"),
+        "javascript" | "js" | "node" => ("js", "node"),
+        "bash" | "sh" | "shell" => ("sh", "bash"),
+        _ => return Err("Idioma no soportado para ejecución automática en WSL".into()),
+    };
+
+    let mut temp_dir = get_app_data_dir(&app_handle)?;
+    temp_dir.push("assets");
+    temp_dir.push("files");
+    fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+
+    let filename = format!("temp_cmd_{}.{}", chrono::Utc::now().timestamp_millis(), ext);
+    let mut temp_file = temp_dir.clone();
+    temp_file.push(&filename);
+
+    fs::write(&temp_file, code).map_err(|e| e.to_string())?;
+
+    let wsl_args = format!("wsl {} {}", cmd, filename);
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(&["/C", "start", "cmd", "/K", &wsl_args])
+            .current_dir(&temp_dir)
+            .spawn()
+            .map_err(|e| format!("Error al abrir CMD: {}", e))?;
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        return Err("Esta función solo está disponible en Windows (WSL)".into());
+    }
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Personality {
+    id: i64,
+    created_at: String,
+    nombre: String,
+    descripcion_corta: String,
+    instrucciones: String,
+    image: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Historial {
+    id: i64,
+    created_at: String,
+    nombre: String,
+    code: i64,
+}
+
+#[tauri::command]
+fn get_personalities(app_handle: AppHandle) -> Result<Vec<Personality>, String> {
+    let mut dir = get_app_data_dir(&app_handle)?;
+    dir.push("assets");
+    dir.push("personalities");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    
+    dir.push("personalities.json");
+    if dir.exists() {
+        let content = fs::read_to_string(dir).map_err(|e| e.to_string())?;
+        if let Ok(data) = serde_json::from_str::<Vec<Personality>>(&content) {
+            return Ok(data);
+        }
+    }
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+fn save_personality(app_handle: AppHandle, personality: Personality) -> Result<Personality, String> {
+    let mut dir = get_app_data_dir(&app_handle)?;
+    dir.push("assets");
+    dir.push("personalities");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    
+    dir.push("personalities.json");
+    let mut personalities = Vec::new();
+    if dir.exists() {
+        let content = fs::read_to_string(&dir).map_err(|e| e.to_string())?;
+        if let Ok(data) = serde_json::from_str::<Vec<Personality>>(&content) {
+            personalities = data;
+        }
+    }
+
+    let mut new_pers = personality.clone();
+    if new_pers.id == 0 {
+        let max_id = personalities.iter().map(|p| p.id).max().unwrap_or(0);
+        new_pers.id = max_id + 1;
+        new_pers.created_at = chrono::Utc::now().to_rfc3339();
+        personalities.push(new_pers.clone());
+    } else {
+        if let Some(p) = personalities.iter_mut().find(|p| p.id == new_pers.id) {
+            p.nombre = new_pers.nombre.clone();
+            p.descripcion_corta = new_pers.descripcion_corta.clone();
+            p.instrucciones = new_pers.instrucciones.clone();
+            p.image = new_pers.image.clone();
+            new_pers = p.clone();
+        } else {
+            return Err("Personality not found".into());
+        }
+    }
+
+    let json_data = serde_json::to_string_pretty(&personalities).map_err(|e| e.to_string())?;
+    fs::write(&dir, json_data).map_err(|e| e.to_string())?;
+    Ok(new_pers)
+}
+
+#[tauri::command]
+fn delete_personality(app_handle: AppHandle, id: i64) -> Result<(), String> {
+    let mut dir = get_app_data_dir(&app_handle)?;
+    dir.push("assets");
+    dir.push("personalities");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    
+    dir.push("personalities.json");
+    if dir.exists() {
+        let content = fs::read_to_string(&dir).map_err(|e| e.to_string())?;
+        if let Ok(mut data) = serde_json::from_str::<Vec<Personality>>(&content) {
+            data.retain(|p| p.id != id);
+            let json_data = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
+            fs::write(&dir, json_data).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_historials(app_handle: AppHandle) -> Result<Vec<Historial>, String> {
+    let mut dir = get_app_data_dir(&app_handle)?;
+    dir.push("assets");
+    dir.push("chats");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    
+    dir.push("historial.json");
+    if dir.exists() {
+        let content = fs::read_to_string(dir).map_err(|e| e.to_string())?;
+        if let Ok(data) = serde_json::from_str::<Vec<Historial>>(&content) {
+            return Ok(data);
+        }
+    }
+    Ok(Vec::new())
+}
+
+#[tauri::command]
+fn save_historial(app_handle: AppHandle, historial: Historial) -> Result<Historial, String> {
+    let mut dir = get_app_data_dir(&app_handle)?;
+    dir.push("assets");
+    dir.push("chats");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    
+    dir.push("historial.json");
+    let mut historials = Vec::new();
+    if dir.exists() {
+        let content = fs::read_to_string(&dir).map_err(|e| e.to_string())?;
+        if let Ok(data) = serde_json::from_str::<Vec<Historial>>(&content) {
+            historials = data;
+        }
+    }
+
+    let mut new_hist = historial.clone();
+    if new_hist.id == 0 {
+        let max_id = historials.iter().map(|p| p.id).max().unwrap_or(0);
+        new_hist.id = max_id + 1;
+        new_hist.created_at = chrono::Utc::now().to_rfc3339();
+        historials.push(new_hist.clone());
+    } else {
+        if let Some(p) = historials.iter_mut().find(|p| p.id == new_hist.id) {
+            p.nombre = new_hist.nombre.clone();
+            p.code = new_hist.code;
+            new_hist = p.clone();
+        } else {
+            return Err("Historial not found".into());
+        }
+    }
+
+    historials.sort_by(|a, b| b.id.cmp(&a.id));
+
+    let json_data = serde_json::to_string_pretty(&historials).map_err(|e| e.to_string())?;
+    fs::write(&dir, json_data).map_err(|e| e.to_string())?;
+    Ok(new_hist)
+}
+
+#[tauri::command]
+fn delete_historial(app_handle: AppHandle, id: i64) -> Result<(), String> {
+    let mut dir = get_app_data_dir(&app_handle)?;
+    dir.push("assets");
+    dir.push("chats");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    
+    dir.push("historial.json");
+    if dir.exists() {
+        let content = fs::read_to_string(&dir).map_err(|e| e.to_string())?;
+        if let Ok(mut data) = serde_json::from_str::<Vec<Historial>>(&content) {
+            data.retain(|h| h.id != id);
+            let json_data = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
+            fs::write(&dir, json_data).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -305,6 +776,10 @@ fn main() {
                 path.pop();
                 path.push("chats");
                 let _ = fs::create_dir_all(&path);
+
+                path.pop();
+                path.push("files");
+                let _ = fs::create_dir_all(&path);
             }
             Ok(())
         })
@@ -314,12 +789,30 @@ fn main() {
             save_background_image,
             save_icon_config,
             load_icon_config,
+            save_api_config,
+            load_api_config,
             save_icon_image,
             save_personality_image,
             get_personality_image_path,
             save_chat_message,
             get_chat_messages,
-            delete_local_chat
+            delete_local_chat,
+            save_path_config,
+            load_path_config,
+            get_current_base_path,
+            export_text_file,
+            open_folder,
+            get_personalities,
+            save_personality,
+            delete_personality,
+            get_historials,
+            save_historial,
+            delete_historial,
+            save_wsl_config,
+            load_wsl_config,
+            execute_wsl_code,
+            open_wsl_cmd,
+            check_wsl_installed
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

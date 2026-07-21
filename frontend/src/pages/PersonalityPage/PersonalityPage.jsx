@@ -25,26 +25,20 @@ const PersonalityPage = () => {
   const fetchPersonalities = async () => {
     setLoading(true);
     try {
-      const response = await fetch(ENDPOINTS.PERSONALITIES);
-      if (response.ok) {
-        const data = await response.json();
-        
-        if (isTauri) {
-          const processedData = await Promise.all(data.map(async (p) => {
-            if (p.image) {
-              try {
-                const fullPath = await invoke('get_personality_image_path', { filename: p.image });
-                return { ...p, localImageUrl: convertFileSrc(fullPath) };
-              } catch (e) {
-                return p;
-              }
+      if (isTauri) {
+        const data = await invoke('get_personalities');
+        const processedData = await Promise.all(data.map(async (p) => {
+          if (p.image) {
+            try {
+              const fullPath = await invoke('get_personality_image_path', { filename: p.image });
+              return { ...p, localImageUrl: convertFileSrc(fullPath) };
+            } catch (e) {
+              return p;
             }
-            return p;
-          }));
-          setPersonalities(processedData || []);
-        } else {
-          setPersonalities(data || []);
-        }
+          }
+          return p;
+        }));
+        setPersonalities(processedData || []);
       }
     } catch (e) {
       console.error("Error fetching personalities:", e);
@@ -129,21 +123,23 @@ const PersonalityPage = () => {
       }
 
       const isEdit = editingId !== null;
-      const url = isEdit ? `${ENDPOINTS.PERSONALITIES}/${editingId}` : ENDPOINTS.PERSONALITIES;
-      const method = isEdit ? 'PUT' : 'POST';
+      if (isEdit) {
+         finalFormData.id = editingId;
+         // Si estamos editando, mantenemos el created_at original que deberíamos haber obtenido al editar,
+         // pero como no lo guardamos en formData, lo sacamos del arreglo original.
+         const originalPersonality = personalities.find(p => p.id === editingId);
+         finalFormData.created_at = originalPersonality ? originalPersonality.created_at : "";
+      } else {
+         finalFormData.id = 0; 
+         finalFormData.created_at = ""; // Rust generates it
+      }
 
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finalFormData)
-      });
-
-      if (response.ok) {
+      if (isTauri) {
+        await invoke('save_personality', { personality: finalFormData });
         setIsModalOpen(false);
         fetchPersonalities();
       } else {
-        const errData = await response.json();
-        throw new Error(errData.error || 'Error al guardar');
+        throw new Error('Tauri no disponible');
       }
     } catch (e) {
       setAlert({ isOpen: true, title: 'Error', message: e.message, isError: true });
@@ -198,6 +194,7 @@ const PersonalityPage = () => {
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)}
         title={editingId ? 'Editar Personalidad' : 'Nueva Personalidad'}
+        disableOverlayClick={true}
         actions={
           <>
             <button className={styles.cancelBtn} onClick={() => setIsModalOpen(false)}>Cancelar</button>

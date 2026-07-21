@@ -1,0 +1,56 @@
+name: "Publish Orbit Release"
+
+on:
+  push:
+    tags:
+      - 'v*' # Se activa automáticamente cuando subes un tag que empiece con 'v' (ej. v1.0.0, v1.0.1)
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write # Otorga permisos a GitHub Actions para publicar en Releases
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest]
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. Configurar entorno de Go
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22' # Ajusta a la versión de Go que estés usando
+
+      # 2. Configurar Node.js (para tu Frontend)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm' # O pnpm/yarn según tu gestor de paquetes
+
+      # 3. Compilar el Backend en Go como Sidecar de Tauri
+      - name: Build Go Sidecar
+        run: |
+          cd backend/cmd/api
+          go build -o ../src-tauri/binaries/orbit-api-x86_64-pc-windows-msvc.exe main.go
+
+      # 4. Instalar dependencias del Frontend
+      - name: Install frontend dependencies
+        run: npm install
+
+      # 5. Compilar la App con Tauri y crear la Release en GitHub
+      - name: Build and Publish Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Orbit ${{ github.ref_name }}'
+          releaseBody: 'Ver el historial de cambios en los commits de este lanzamiento.'
+          releaseDraft: false
+          prerelease: false

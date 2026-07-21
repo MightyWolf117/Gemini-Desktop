@@ -12,10 +12,18 @@ const useSettingsStore = create(
       aiModel: 'gemini-pro',
       temperature: 0.7,
       
+      // Ajustes de rutas (Desarrollador)
+      basePath: null,
+      resolvedBasePath: null,
+      enableWsl: false,
+      
       // Ajustes de fondo
       bgPath: null, // path local en Tauri
       bgBlur: 10,
       bgOpacity: 50,
+
+      // Ajustes de API
+      googleApiKey: null,
 
       // Ajustes de Iconos
       userIconPath: null,
@@ -28,6 +36,10 @@ const useSettingsStore = create(
       setTheme: (theme) => set({ theme }),
       setAiModel: (model) => set({ aiModel: model }),
       setTemperature: (temp) => set({ temperature: temp }),
+      setBasePath: (path) => set({ basePath: path }),
+      setResolvedBasePath: (path) => set({ resolvedBasePath: path }),
+      setEnableWsl: (enabled) => set({ enableWsl: enabled }),
+      setGoogleApiKey: (key) => set({ googleApiKey: key }),
       
       setBgSettings: (settings) => set((state) => ({ ...state, ...settings })),
       setIconSettings: (settings) => set((state) => ({ ...state, ...settings })),
@@ -102,6 +114,80 @@ const useSettingsStore = create(
         }
       },
 
+      // Acciones de Backend Tauri (Rutas)
+      savePathConfigToBackend: async () => {
+        if (!isTauri) return;
+        const { basePath } = get();
+        try {
+          await invoke('save_path_config', {
+            config: { base_path: basePath }
+          });
+          const resolved = await invoke('get_current_base_path');
+          set({ resolvedBasePath: resolved });
+        } catch (e) {
+          console.error("Error al guardar path config:", e);
+          throw e;
+        }
+      },
+
+      loadPathConfigFromBackend: async () => {
+        if (!isTauri) return;
+        try {
+          const config = await invoke('load_path_config');
+          const resolved = await invoke('get_current_base_path');
+          set({ basePath: config.base_path, resolvedBasePath: resolved });
+        } catch (e) {
+          console.error("Error al cargar path config:", e);
+        }
+      },
+
+      saveWslConfigToBackend: async () => {
+        if (!isTauri) return;
+        const { enableWsl } = get();
+        try {
+          await invoke('save_wsl_config', {
+            config: { enabled: enableWsl }
+          });
+        } catch (e) {
+          console.error("Error al guardar wsl config:", e);
+          throw e;
+        }
+      },
+
+      loadWslConfigFromBackend: async () => {
+        if (!isTauri) return;
+        try {
+          const config = await invoke('load_wsl_config');
+          set({ enableWsl: config.enabled });
+        } catch (e) {
+          console.error("Error al cargar wsl config:", e);
+        }
+      },
+
+      // Acciones de Backend Tauri (API)
+      saveApiConfigToBackend: async () => {
+        if (!isTauri) return;
+        const { googleApiKey } = get();
+        try {
+          await invoke('save_api_config', {
+            config: { google_api_key: googleApiKey }
+          });
+        } catch (e) {
+          console.error("Error al guardar api config:", e);
+          throw e;
+        }
+      },
+
+      loadApiConfigFromBackend: async () => {
+        if (!isTauri) return;
+        try {
+          const config = await invoke('load_api_config');
+          set({ googleApiKey: config.google_api_key });
+        } catch (e) {
+          console.error("Error al cargar api config:", e);
+        }
+      },
+
       // API Backend Go
       isOnline: false,
       availableModels: [],
@@ -121,12 +207,19 @@ const useSettingsStore = create(
       },
 
       fetchModels: async () => {
+        const { googleApiKey } = get();
         try {
           const { ENDPOINTS } = await import('../service/api');
-          const response = await fetch(ENDPOINTS.MODELS);
+          const response = await fetch(ENDPOINTS.MODELS, {
+            headers: {
+              'X-Google-API-Key': googleApiKey || ''
+            }
+          });
           if (response.ok) {
             const data = await response.json();
             set({ availableModels: data.models || [] });
+          } else {
+            console.error("Error cargando modelos, status:", response.status);
           }
         } catch (e) {
           console.error("Error al cargar modelos:", e);

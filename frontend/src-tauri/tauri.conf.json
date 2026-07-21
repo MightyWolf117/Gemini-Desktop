@@ -7,11 +7,14 @@
   },
   "package": {
     "productName": "Orbit",
-    "version": "0.1.0"
+    "version": "1.0.0-26.7"
   },
   "tauri": {
     "allowlist": {
       "all": false,
+      "dialog": {
+        "all": true
+      },
       "fs": {
         "all": true,
         "scope": [
@@ -60,7 +63,11 @@
       "windows": {
         "certificateThumbprint": null,
         "digestAlgorithm": "sha256",
-        "timestampUrl": ""
+        "timestampUrl": "",
+        "wix": {
+          "bannerPath": "installer_banner.bmp",
+          "dialogImagePath": "installer_dialog.bmp"
+        }
       }
     },
     "security": {

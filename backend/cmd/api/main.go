@@ -3,30 +3,23 @@ package main
 import (
 	"log"
 
-	"github.com/gin-gonic/gin"
-
 	"orbit-backend/internal/config"
 	"orbit-backend/internal/handler"
-	"orbit-backend/internal/middleware"
-	"orbit-backend/internal/repository"
 	"orbit-backend/internal/service"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	// 1. Cargar Configuración (variables de entorno)
 	cfg := config.LoadConfig()
 
-	// 2. Inicializar Repositorio (Supabase)
-	repo := repository.NewSupabaseRepo(cfg.SupabaseURL, cfg.SupabasePassword)
+	// 2. Inicializar Servicio (Gemini)
+	aiService := service.NewAIService()
 
-	// 3. Inicializar Servicio (Gemini) - Inyectamos repositorio
-	aiService := service.NewAIService(cfg.GoogleAPIKey, repo, repo)
-
-	// 4. Inicializar Handlers
-	chatHandler := handler.NewChatHandler(aiService)
-	personalityHandler := handler.NewPersonalityHandler(repo)
+	// 3. Inicializar Handlers
+	chatHandler := handler.NewChatHandler(aiService, cfg.GoogleAPIKey)
 	systemHandler := handler.NewSystemHandler(cfg.GoogleAPIKey)
-	historialHandler := handler.NewHistorialHandler(repo)
 
 	// 5. Configurar el Servidor y Enrutador Gin
 	gin.SetMode(gin.ReleaseMode) // Cambiar a gin.DebugMode si necesitas ver los logs detallados
@@ -36,7 +29,7 @@ func main() {
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, PATCH, SELECT")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Google-API-Key")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -44,9 +37,8 @@ func main() {
 		c.Next()
 	})
 
-	// Agrupamos las rutas bajo /api y aplicamos el Rate Limiter (banning masivo por IP)
+	// Agrupamos las rutas bajo /api (Sin límite de peticiones para entorno local)
 	api := router.Group("/api")
-	api.Use(middleware.RateLimiterMiddleware())
 	{
 		// Health Check
 		api.GET("/health", systemHandler.Health)
@@ -56,20 +48,12 @@ func main() {
 
 		// Chat IA
 		api.POST("/chat", chatHandler.HandleChat)
-
-		// CRUD Personalidades
-		api.GET("/personalities", personalityHandler.GetAll)
-		api.POST("/personalities", personalityHandler.Create)
-		api.PUT("/personalities/:id", personalityHandler.Update)
-
-		// CRUD Historial
-		api.GET("/historial", historialHandler.GetAll)
-		api.DELETE("/historial/:id", historialHandler.Delete)
 	}
 
-	// 6. Iniciar Servidor
-	log.Printf("Iniciando servidor del Asistente de IA en el puerto %s...", cfg.Port)
-	if err := router.Run(":" + cfg.Port); err != nil {
+	address := "127.0.0.1:" + cfg.Port
+	log.Printf("Iniciando servidor de Orbit en http://%s...", address)
+
+	if err := router.Run(address); err != nil {
 		log.Fatalf("Error al arrancar el servidor: %v", err)
 	}
 }
