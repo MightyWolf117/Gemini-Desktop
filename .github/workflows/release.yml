@@ -45,6 +45,7 @@ jobs:
         run: |
           cd frontend
           npm install
+          npm run build
 
       # 5. Compilar la App con Tauri y Publicar en GitHub
       - name: Build and Publish Tauri App
