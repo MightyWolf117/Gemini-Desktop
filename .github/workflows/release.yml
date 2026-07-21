@@ -3,12 +3,12 @@ name: "Publish Orbit Release"
 on:
   push:
     tags:
-      - 'v*' # Se activa automáticamente cuando subes un tag que empiece con 'v' (ej. v1.0.0, v1.0.1)
+      - 'v*' # Se activa al subir tags que empiecen por 'v' (ej. v1.0.0)
 
 jobs:
   publish-tauri:
     permissions:
-      contents: write # Otorga permisos a GitHub Actions para publicar en Releases
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -24,27 +24,29 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22' # Ajusta a la versión de Go que estés usando
+          go-version: '1.22'
 
-      # 2. Configurar Node.js indicando la ruta del lockfile
+      # 2. Configurar Node.js (apuntando al lockfile de /frontend)
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: 'frontend/package-lock.json' # Ajusta 'frontend' a la ruta exacta de tu subcarpeta
+          cache-dependency-path: 'frontend/package-lock.json'
 
-      # 3. Compilar el Backend en Go como Sidecar de Tauri
+      # 3. Compilar el Backend en Go directamente en la carpeta de binarios de Tauri
       - name: Build Go Sidecar
         run: |
           cd backend/cmd/api
-          go build -o ../src-tauri/binaries/orbit-api-x86_64-pc-windows-msvc.exe main.go
+          go build -o ../../../frontend/src-tauri/binaries/orbit-api-x86_64-pc-windows-msvc.exe main.go
 
-      # 4. Instalar dependencias del Frontend
+      # 4. Instalar dependencias del Frontend dentro de /frontend
       - name: Install frontend dependencies
-        run: npm install
+        run: |
+          cd frontend
+          npm install
 
-      # 5. Compilar la App con Tauri, Firmar y Publicar en GitHub
+      # 5. Compilar la App con Tauri y Publicar en GitHub
       - name: Build and Publish Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
@@ -52,6 +54,7 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSPHRASE: ${{ secrets.TAURI_KEY_PASSPHRASE }}
         with:
+          projectPath: 'frontend' # <-- Le indica a Tauri que tu proyecto está en /frontend
           tagName: ${{ github.ref_name }}
           releaseName: 'Orbit ${{ github.ref_name }}'
           releaseBody: 'Notas del parche para ${{ github.ref_name }}'
