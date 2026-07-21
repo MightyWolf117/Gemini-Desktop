@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::AppHandle;
+use tauri::api::process::Command;
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 struct PathConfig {
@@ -755,6 +756,22 @@ fn delete_historial(app_handle: AppHandle, id: i64) -> Result<(), String> {
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
+            match Command::new_sidecar("binaries/orbit-api") {
+                Ok(cmd) => {
+                    match cmd.spawn() {
+                        Ok((mut rx, mut _child)) => {
+                            tauri::async_runtime::spawn(async move {
+                                while let Some(event) = rx.recv().await {
+                                    println!("API: {:?}", event);
+                                }
+                            });
+                        }
+                        Err(e) => println!("Failed to spawn sidecar: {}", e),
+                    }
+                }
+                Err(e) => println!("Failed to find sidecar: {}", e),
+            }
+
             let data_dir = tauri::api::path::app_local_data_dir(&app.config());
             if let Some(mut path) = data_dir {
                 path.push("config");
