@@ -1,0 +1,173 @@
+@use '../../styles/variables' as *;
+@use '../../styles/mixins' as *;
+
+.sidebar {
+  width: 280px;
+  height: 100%;
+  background-color: $color-bg-sidebar;
+  border-right: 1px solid $color-border;
+  display: flex;
+  flex-direction: column;
+  padding: $spacing-md;
+}
+
+.header {
+  margin-bottom: $spacing-xl;
+
+  .title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: $spacing-md;
+    color: $color-text-primary;
+    padding-left: $spacing-xs;
+  }
+}
+
+.newChatBtn {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  width: 100%;
+  background-color: transparent;
+  border: 1px solid $color-border;
+  color: $color-text-primary;
+  padding: $spacing-sm $spacing-md;
+  border-radius: $border-radius-md;
+  font-weight: 500;
+  transition: all $transition-normal;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.chatList {
+  flex: 1;
+  overflow-y: auto;
+  @include custom-scrollbar;
+  margin-right: -4px; // Para compensar el scrollbar
+  padding-right: 4px;
+
+  .listTitle {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: $color-text-muted;
+    font-weight: 600;
+    margin-bottom: $spacing-sm;
+    padding-left: $spacing-xs;
+  }
+}
+
+.chatItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: $border-radius-md;
+  margin-bottom: 2px;
+  transition: background-color $transition-fast;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.03);
+    
+    .deleteBtn {
+      opacity: 1;
+    }
+  }
+  
+  &.active {
+    background-color: rgba(255, 255, 255, 0.08);
+    
+    .chatLink {
+      color: $color-text-primary;
+    }
+  }
+}
+
+.chatLink {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm;
+  color: $color-text-secondary;
+  overflow: hidden;
+  
+  .chatTitle {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.9rem;
+  }
+}
+
+.deleteBtn {
+  opacity: 0;
+  color: $color-text-muted;
+  padding: $spacing-sm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all $transition-fast;
+  
+  &:hover {
+    color: $color-secondary;
+  }
+}
+
+.emptyState {
+  color: $color-text-muted;
+  font-size: 0.85rem;
+  padding: $spacing-sm;
+  text-align: center;
+  margin-top: $spacing-md;
+}
+
+.footer {
+  margin-top: auto;
+  padding-top: $spacing-md;
+  border-top: 1px solid $color-border;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+}
+
+.healthIndicator {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: 0.8rem;
+  color: $color-text-secondary;
+  padding: $spacing-xs $spacing-md;
+  margin-bottom: $spacing-sm;
+  
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    
+    &.online { background-color: #22c55e; box-shadow: 0 0 5px rgba(34, 197, 94, 0.5); }
+    &.offline { background-color: #ef4444; box-shadow: 0 0 5px rgba(239, 68, 68, 0.5); }
+  }
+}
+
+.footerBtn {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  width: 100%;
+  padding: $spacing-sm $spacing-md;
+  color: $color-text-secondary;
+  border-radius: $border-radius-md;
+  transition: all $transition-fast;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: $color-text-primary;
+  }
+  
+  &.activeBtn {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: $color-text-primary;
+  }
+}

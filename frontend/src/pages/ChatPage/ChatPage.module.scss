@@ -1,0 +1,225 @@
+@use '../../styles/variables' as *;
+@use '../../styles/mixins' as *;
+
+.chatContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  position: relative;
+}
+
+.messagesArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: $spacing-xl $spacing-xxl;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xl;
+  @include custom-scrollbar;
+}
+
+.messageWrapper {
+  display: flex;
+  gap: $spacing-md;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+  
+  &.user {
+    flex-direction: row-reverse;
+    
+    .messageContent {
+      align-items: flex-end;
+    }
+    
+    .text {
+      background-color: $color-primary;
+      color: white;
+      border-bottom-right-radius: 4px;
+    }
+  }
+  
+  &.ai {
+    .text {
+      background-color: $color-bg-surface;
+      border: 1px solid $color-border;
+      border-bottom-left-radius: 4px;
+    }
+  }
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: $border-radius-full;
+  @include flex-center;
+  background-color: $color-bg-surface;
+  border: 1px solid $color-border;
+  color: $color-text-secondary;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+.messageContent {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-xs;
+  max-width: 80%;
+}
+
+.senderName {
+  font-size: 0.8rem;
+  color: $color-text-muted;
+  font-weight: 500;
+  padding: 0 4px;
+}
+
+.text {
+  padding: $spacing-sm $spacing-md;
+  border-radius: $border-radius-lg;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.inputArea {
+  padding: $spacing-md $spacing-xxl;
+  background: linear-gradient(to top, $color-bg-main 60%, transparent);
+  padding-bottom: $spacing-xl;
+}
+
+.inputHeader {
+  max-width: 800px;
+  margin: 0 auto $spacing-sm;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.personalitySelector {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: $border-radius-full;
+  padding: 4px 12px;
+  gap: 6px;
+  color: $color-text-secondary;
+  transition: all $transition-fast;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: $color-text-primary;
+  }
+}
+
+.selectorIcon {
+  color: $color-primary;
+  flex-shrink: 0;
+}
+
+.selectNative {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 0.8rem;
+  font-family: inherit;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  padding-right: 18px; /* space for chevron */
+  
+  option {
+    background: $color-bg-surface;
+    color: $color-text-primary;
+  }
+}
+
+.chevron {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.inputForm {
+  max-width: 800px;
+  margin: 0 auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  background-color: $color-bg-input;
+  border: 1px solid $color-border;
+  border-radius: $border-radius-lg;
+  padding: $spacing-xs $spacing-sm;
+  transition: border-color $transition-fast;
+  
+  &:focus-within {
+    border-color: rgba($color-primary, 0.5);
+    box-shadow: 0 0 0 2px rgba($color-primary, 0.1);
+  }
+}
+
+.input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: $spacing-sm;
+  color: $color-text-primary;
+  font-size: 1rem;
+}
+
+.sendButton {
+  @include flex-center;
+  width: 40px;
+  height: 40px;
+  border-radius: $border-radius-md;
+  color: $color-text-primary;
+  transition: all $transition-fast;
+  
+  &:disabled {
+    color: $color-text-muted;
+    cursor: not-allowed;
+  }
+  
+  &:not(:disabled):hover {
+    background-color: $color-primary;
+    color: white;
+  }
+}
+
+.disclaimer {
+  text-align: center;
+  font-size: 0.75rem;
+  color: $color-text-muted;
+  margin-top: $spacing-md;
+}
+
+.emptyState, .noMessages {
+  @include flex-center;
+  flex-direction: column;
+  height: 100%;
+  color: $color-text-secondary;
+  text-align: center;
+  gap: $spacing-md;
+  
+  .icon {
+    color: $color-text-muted;
+    opacity: 0.5;
+  }
+  
+  h2 {
+    color: $color-text-primary;
+  }
+}

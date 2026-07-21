@@ -1,0 +1,59 @@
+// global.scss
+@use 'variables' as *;
+@use 'mixins' as *;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden; // Previene scroll en toda la app, cada contenedor manejará el suyo
+  background-color: $color-bg-main;
+  color: $color-text-primary;
+  font-family: $font-family-sans;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+a {
+  color: $color-primary;
+  text-decoration: none;
+  transition: color $transition-fast;
+  
+  &:hover {
+    color: $color-primary-hover;
+  }
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  border: none;
+  background: none;
+  outline: none;
+}
+
+input, textarea {
+  font-family: inherit;
+  outline: none;
+  
+  &::placeholder {
+    color: $color-text-muted;
+  }
+}
+
+// Clases utilitarias
+.text-muted { color: $color-text-muted; }
+.text-primary { color: $color-primary; }

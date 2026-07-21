@@ -1,0 +1,33 @@
+@use './styles/variables' as *;
+
+.appLayout {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  background-color: rgba($color-bg-main, 0.75); // Hacer un poco transparente para ver el fondo
+  position: relative;
+  z-index: 1;
+}
+
+.globalBackground {
+  position: fixed;
+  top: -10%; // Sobredimensionar para evitar bordes feos por el blur
+  left: -10%;
+  width: 120%;
+  height: 120%;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.mainContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}

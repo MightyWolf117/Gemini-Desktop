@@ -1,0 +1,46 @@
+// _mixins.scss
+@use 'variables' as *;
+
+// Mixin para scrollbars personalizados (Webkit)
+@mixin custom-scrollbar {
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background-color: $color-border;
+    border-radius: $border-radius-full;
+    
+    &:hover {
+      background-color: $color-text-muted;
+    }
+  }
+}
+
+// Centrar elementos absolutos
+@mixin absolute-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+// Efecto cristal (Glassmorphism)
+@mixin glass-effect {
+  background: rgba($color-bg-surface, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+// Flexbox centrado
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
