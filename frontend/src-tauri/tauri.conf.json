@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "Orbit",
-    "version": "1.0.0-2607"
+    "version": "1.0.3"
   },
   "tauri": {
     "allowlist": {
