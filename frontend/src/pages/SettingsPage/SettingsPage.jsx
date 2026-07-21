@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Save, Image as ImageIcon, Upload, User, Bot, FolderOpen, AlertTriangle, ExternalLink } from 'lucide-react';
+import { Save, Image as ImageIcon, Upload, User, Bot, FolderOpen, AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import useSettingsStore from '../../store/settingsStore';
 import Modal from '../../components/common/Modal/Modal';
 import styles from './SettingsPage.module.scss';
 import { invoke } from '@tauri-apps/api/tauri';
 import { convertFileSrc } from '@tauri-apps/api/tauri';
 import { open } from '@tauri-apps/api/dialog';
+import { checkUpdate, installUpdate } from '@tauri-apps/api/updater';
+import { relaunch } from '@tauri-apps/api/process';
 
 const isTauri = typeof window !== 'undefined' && window.__TAURI_IPC__ !== undefined;
 
@@ -29,10 +31,57 @@ const SettingsPage = () => {
     }
   }, [fetchModels, loadPathConfigFromBackend, loadWslConfigFromBackend]);
 
-  const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', isError: false });
+  const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', isError: false, isUpdate: false });
   const [warningModalOpen, setWarningModalOpen] = useState(false);
   const [wslStatus, setWslStatus] = useState(null);
   const [appVersion, setAppVersion] = useState('');
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  const handleInstallUpdate = async () => {
+    setModalState({ ...modalState, isOpen: false });
+    try {
+      await installUpdate();
+      await relaunch();
+    } catch (error) {
+      console.error("Error al instalar la actualización:", error);
+    }
+  };
+
+  const checkForUpdates = async () => {
+    if (!isTauri) return;
+    setIsCheckingUpdate(true);
+    try {
+      const { shouldUpdate, manifest } = await checkUpdate();
+      if (shouldUpdate) {
+        setModalState({
+          isOpen: true,
+          title: 'Nueva Actualización Disponible',
+          message: `La versión ${manifest?.version} está disponible. La aplicación se reiniciará después de instalarla.`,
+          isError: false,
+          isUpdate: true
+        });
+      } else {
+        setModalState({
+          isOpen: true,
+          title: 'Sin actualizaciones',
+          message: 'Orbit ya está actualizado a la versión más reciente.',
+          isError: false,
+          isUpdate: false
+        });
+      }
+    } catch (error) {
+      console.error("Error al buscar actualizaciones:", error);
+      setModalState({
+        isOpen: true,
+        title: 'Error de Actualización',
+        message: 'No se pudo verificar si hay actualizaciones en este momento.',
+        isError: true,
+        isUpdate: false
+      });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   useEffect(() => {
     if (isTauri) {
@@ -462,8 +511,18 @@ const SettingsPage = () => {
       </div>
 
       <footer className={styles.footer}>
-        <div style={{ flex: 1, color: '#6E6E77', fontSize: '0.9rem', display: 'flex', alignItems: 'center' }}>
+        <div style={{ flex: 1, color: '#6E6E77', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
           {appVersion ? `Orbit Versión ${appVersion}` : 'Orbit'}
+          {isTauri && (
+            <button 
+              onClick={checkForUpdates} 
+              disabled={isCheckingUpdate}
+              style={{ background: 'none', border: '1px solid #2C2C35', color: '#A0A0AB', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.8rem' }}
+            >
+              <RefreshCw size={14} className={isCheckingUpdate ? styles.spin : ''} />
+              {isCheckingUpdate ? 'Buscando...' : 'Buscar actualizaciones'}
+            </button>
+          )}
         </div>
         <button className={styles.resetBtn} onClick={resetSettings}>Restablecer Valores</button>
         <button className={styles.saveBtn} onClick={handleSave}>
@@ -478,12 +537,23 @@ const SettingsPage = () => {
         onClose={() => setModalState({ ...modalState, isOpen: false })}
         title={modalState.title}
         actions={
-          <button 
-            className={`${styles.modalBtn} ${modalState.isError ? styles.modalBtnError : styles.modalBtnPrimary}`}
-            onClick={() => setModalState({ ...modalState, isOpen: false })}
-          >
-            Entendido
-          </button>
+          <>
+            {modalState.isUpdate && (
+              <button 
+                className={`${styles.modalBtn} ${styles.modalBtnPrimary}`}
+                onClick={handleInstallUpdate}
+                style={{ marginRight: '10px' }}
+              >
+                Instalar ahora
+              </button>
+            )}
+            <button 
+              className={`${styles.modalBtn} ${modalState.isError ? styles.modalBtnError : (modalState.isUpdate ? styles.modalBtn : styles.modalBtnPrimary)}`}
+              onClick={() => setModalState({ ...modalState, isOpen: false })}
+            >
+              {modalState.isUpdate ? 'Más tarde' : 'Entendido'}
+            </button>
+          </>
         }
       >
         <p>{modalState.message}</p>

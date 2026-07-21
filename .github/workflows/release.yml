@@ -43,14 +43,16 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      # 5. Compilar la App con Tauri y crear la Release en GitHub
+      # 5. Compilar la App con Tauri, Firmar y Publicar en GitHub
       - name: Build and Publish Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSPHRASE: ${{ secrets.TAURI_KEY_PASSPHRASE }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Orbit ${{ github.ref_name }}'
-          releaseBody: 'Ver el historial de cambios en los commits de este lanzamiento.'
+          releaseBody: 'Notas del parche para ${{ github.ref_name }}'
           releaseDraft: false
           prerelease: false

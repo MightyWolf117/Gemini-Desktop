@@ -7,7 +7,7 @@
   },
   "package": {
     "productName": "Orbit",
-    "version": "1.0.0-26.7"
+    "version": "1.0.0-2607"
   },
   "tauri": {
     "allowlist": {
@@ -30,7 +30,15 @@
       "protocol": {
         "all": true,
         "asset": true,
-        "assetScope": ["**"]
+        "assetScope": [
+          "**"
+        ]
+      },
+      "process": {
+        "relaunch": true
+      },
+      "app": {
+        "all": true
       }
     },
     "bundle": {
@@ -74,7 +82,12 @@
       "csp": null
     },
     "updater": {
-      "active": false
+      "active": true,
+      "dialog": false,
+      "endpoints": [
+        "https://github.com/MightyWolf117/Orbit-Desktop/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDIyNUUzMTc5QTI1Q0ZCN0MKUldSOCsxeWllVEZlSXZKYzRvNVBpbkdmbmxMVS9hcUkrbkoyZGp2THdSdHVRN1BCRkp6VjRHTjEK"
     },
     "windows": [
       {
